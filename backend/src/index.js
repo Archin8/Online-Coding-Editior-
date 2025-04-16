@@ -2,18 +2,26 @@ const app = require('express')()
 const http = require('http')
 const { Server } = require('socket.io')
 const cors = require("cors")
+import path from "path";
 
 app.use(cors())
+const __dirname = path.resolve();
 
 const server = http.createServer(app)
 
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: "http://localhost:5173",
     methods: ["GET", "POST"]
   }
 })
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(path.join(__dirname, "../frontend/dist")));
 
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html"));
+  });
+}
 app.get('/', function (req, res) {
   res.send('Hello from the server!')
 })
