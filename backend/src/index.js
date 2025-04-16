@@ -1,13 +1,18 @@
-const express = require('express');
-const app = express();
-const http = require('http');
-const { Server } = require('socket.io');
-const cors = require("cors");
-const path = require("path");
+import cors from 'cors';
+import express from 'express';
+import http from 'http';
+import path from 'path';
+import { Server } from 'socket.io';
+import { fileURLToPath } from 'url';
 
+const app = express();
+const server = http.createServer(app);
+
+// Allow cross-origin requests from frontend
 app.use(cors());
 
-const server = http.createServer(app);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const io = new Server(server, {
   cors: {
@@ -44,7 +49,6 @@ async function getUsersinRoom(roomId, io) {
 
 async function updateUserslistAndCodeMap(io, socket, roomId) {
   socket.in(roomId).emit("member left", { username: socketID_to_Users_Map[socket.id]?.username });
-
   delete socketID_to_Users_Map[socket.id];
   const userslist = await getUsersinRoom(roomId, io);
   socket.in(roomId).emit("updating client list", { userslist });
@@ -58,12 +62,10 @@ io.on('connection', function (socket) {
   console.log('A user connected', socket.id);
 
   socket.on("when a user joins", async ({ roomId, username }) => {
-    console.log("username: ", username);
     socketID_to_Users_Map[socket.id] = { username };
     socket.join(roomId);
 
     const userslist = await getUsersinRoom(roomId, io);
-
     socket.in(roomId).emit("updating client list", { userslist });
     io.to(socket.id).emit("updating client list", { userslist });
 
@@ -76,29 +78,27 @@ io.on('connection', function (socket) {
   });
 
   socket.on("update language", ({ roomId, languageUsed }) => {
-    if (roomId in roomID_to_Code_Map) {
-      roomID_to_Code_Map[roomId].languageUsed = languageUsed;
-    } else {
-      roomID_to_Code_Map[roomId] = { languageUsed };
-    }
+    roomID_to_Code_Map[roomId] = {
+      ...roomID_to_Code_Map[roomId],
+      languageUsed
+    };
   });
 
   socket.on("syncing the language", ({ roomId }) => {
-    if (roomId in roomID_to_Code_Map) {
+    if (roomID_to_Code_Map[roomId]) {
       socket.in(roomId).emit("on language change", { languageUsed: roomID_to_Code_Map[roomId].languageUsed });
     }
   });
 
   socket.on("update code", ({ roomId, code }) => {
-    if (roomId in roomID_to_Code_Map) {
-      roomID_to_Code_Map[roomId].code = code;
-    } else {
-      roomID_to_Code_Map[roomId] = { code };
-    }
+    roomID_to_Code_Map[roomId] = {
+      ...roomID_to_Code_Map[roomId],
+      code
+    };
   });
 
   socket.on("syncing the code", ({ roomId }) => {
-    if (roomId in roomID_to_Code_Map) {
+    if (roomID_to_Code_Map[roomId]) {
       socket.in(roomId).emit("on code change", { code: roomID_to_Code_Map[roomId].code });
     }
   });
@@ -108,12 +108,12 @@ io.on('connection', function (socket) {
     updateUserslistAndCodeMap(io, socket, roomId);
   });
 
-  socket.on("disconnecting", async () => {
-    for (const eachRoom of socket.rooms) {
+  socket.on("disconnecting", () => {
+    socket.rooms.forEach((eachRoom) => {
       if (eachRoom in roomID_to_Code_Map) {
-        await updateUserslistAndCodeMap(io, socket, eachRoom);
+        updateUserslistAndCodeMap(io, socket, eachRoom);
       }
-    }
+    });
   });
 
   socket.on('disconnect', function () {
