@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Toaster, toast } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import { v4 as uuidv4, validate } from "uuid";
-import "./JoinRoom.css";
+import "./Joinroom.css";
 
 export default function JoinRoom() {
     const navigate = useNavigate()

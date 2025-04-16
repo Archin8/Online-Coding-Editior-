@@ -3,7 +3,7 @@ import {
   RouterProvider,
 } from "react-router-dom";
 import SocketWrapper from "./components/SocketWrapper";
-import JoinRoom from "./routes/joinroom/JoinRoom";
+import JoinRoom from "./routes/joinroom/Joinroom";
 import Room from "./routes/room/Room";
 
 const router = createBrowserRouter([
