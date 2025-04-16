@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import AceEditor from "react-ace";
-import { Toaster, toast } from 'react-hot-toast';
+import { Toaster, toast } from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
 import { generateColor } from "../../utils";
-import './Room.css';
+import "./Room.css";
 
 import "ace-builds/src-noconflict/mode-c_cpp";
 import "ace-builds/src-noconflict/mode-css";
