@@ -2,7 +2,7 @@ const app = require('express')()
 const http = require('http')
 const { Server } = require('socket.io')
 const cors = require("cors")
-import path from "path";
+const path = require("path");
 
 app.use(cors())
 const __dirname = path.resolve();
@@ -22,9 +22,6 @@ if (process.env.NODE_ENV === "production") {
     res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html"));
   });
 }
-app.get('/', function (req, res) {
-  res.send('Hello from the server!')
-})
 
 const socketID_to_Users_Map = {}
 const roomID_to_Code_Map = {}
