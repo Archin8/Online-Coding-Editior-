@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import AceEditor from "react-ace";
 import { Toaster, toast } from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
@@ -22,6 +22,10 @@ import "ace-builds/src-noconflict/ext-language_tools";
 import "ace-builds/src-noconflict/ext-searchbox";
 import "ace-builds/src-noconflict/theme-monokai";
 
+const BASE_URL = import.meta.env.MODE === "development" ? "http://localhost:5000" : "";
+
+const COMPILABLE_LANGUAGES = ["javascript", "java", "c_cpp", "python", "typescript", "golang"];
+
 export default function Room({ socket }) {
   const navigate = useNavigate()
   const { roomId } = useParams()
@@ -29,6 +33,12 @@ export default function Room({ socket }) {
   const [fetchedCode, setFetchedCode] = useState(() => "")
   const [language, setLanguage] = useState(() => "javascript")
   const [codeKeybinding, setCodeKeybinding] = useState(() => undefined)
+
+  // Compiler state
+  const [isRunning, setIsRunning] = useState(false)
+  const [outputData, setOutputData] = useState(null)
+  const [showOutput, setShowOutput] = useState(false)
+  const outputRef = useRef(null)
 
   const languagesAvailable = ["javascript", "java", "c_cpp", "python", "typescript", "golang", "yaml", "html"]
   const codeKeybindingsAvailable = ["default", "emacs", "vim"]
@@ -63,6 +73,55 @@ export default function Room({ socket }) {
     }
   }
 
+  async function handleRunCode() {
+    if (!fetchedCode.trim()) {
+      toast.error("No code to run");
+      return;
+    }
+
+    if (!COMPILABLE_LANGUAGES.includes(language)) {
+      toast.error(`${language} is not supported for execution`);
+      return;
+    }
+
+    setIsRunning(true);
+    setShowOutput(true);
+    setOutputData(null);
+
+    try {
+      const response = await fetch(`${BASE_URL}/api/execute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: fetchedCode, language }),
+      });
+
+      const result = await response.json();
+      setOutputData(result);
+
+      if (result.timedOut) {
+        toast.error("Execution timed out");
+      }
+    } catch (err) {
+      setOutputData({
+        output: "",
+        error: `Failed to connect to server: ${err.message}`,
+        exitCode: 1,
+        executionTime: 0,
+        timedOut: false,
+      });
+      toast.error("Failed to run code");
+    } finally {
+      setIsRunning(false);
+    }
+  }
+
+  // Auto-scroll output to bottom
+  useEffect(() => {
+    if (outputRef.current) {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight;
+    }
+  }, [outputData]);
+
   useEffect(() => {
     socket.on("updating client list", ({ userslist }) => {
       setFetchedUsers(userslist)
@@ -96,6 +155,8 @@ export default function Room({ socket }) {
     }
   }, [socket])
 
+  const canRun = COMPILABLE_LANGUAGES.includes(language);
+
   return (
     <div className="room">
       <div className="roomSidebar">
@@ -116,6 +177,27 @@ export default function Room({ socket }) {
             </select>
           </div>
 
+          {canRun && (
+            <button
+              className={`runCodeBtn ${isRunning ? 'runCodeBtnRunning' : ''}`}
+              onClick={handleRunCode}
+              disabled={isRunning}
+              id="runCodeBtn"
+            >
+              {isRunning ? (
+                <>
+                  <span className="runCodeSpinner"></span>
+                  Running...
+                </>
+              ) : (
+                <>
+                  <span className="runCodePlayIcon">▶</span>
+                  Run Code
+                </>
+              )}
+            </button>
+          )}
+
           <p>Connected Users:</p>
           <div className="roomSidebarUsers">
             {fetchedUsers.map((each) => (
@@ -133,30 +215,77 @@ export default function Room({ socket }) {
         }}>Leave</button>
       </div>
 
-      <AceEditor
-        placeholder="Write your code here."
-        className="roomCodeEditor"
-        mode={language}
-        keyboardHandler={codeKeybinding}
-        theme="monokai"
-        name="collabEditor"
-        width="auto"
-        height="auto"
-        value={fetchedCode}
-        onChange={onChange}
-        fontSize={15}
-        showPrintMargin={true}
-        showGutter={true}
-        highlightActiveLine={true}
-        enableLiveAutocompletion={true}
-        enableBasicAutocompletion={false}
-        enableSnippets={false}
-        wrapEnabled={true}
-        tabSize={2}
-        editorProps={{
-          $blockScrolling: true
-        }}
-      />
+      <div className="editorAndOutputWrapper">
+        <AceEditor
+          placeholder="Write your code here."
+          className="roomCodeEditor"
+          mode={language}
+          keyboardHandler={codeKeybinding}
+          theme="monokai"
+          name="collabEditor"
+          width="100%"
+          height="100%"
+          value={fetchedCode}
+          onChange={onChange}
+          fontSize={15}
+          showPrintMargin={true}
+          showGutter={true}
+          highlightActiveLine={true}
+          enableLiveAutocompletion={true}
+          enableBasicAutocompletion={false}
+          enableSnippets={false}
+          wrapEnabled={true}
+          tabSize={2}
+          editorProps={{
+            $blockScrolling: true
+          }}
+        />
+
+        {showOutput && (
+          <div className="outputPanel">
+            <div className="outputPanelHeader">
+              <div className="outputPanelHeaderLeft">
+                <span className="outputPanelTitle">Output</span>
+                {outputData && (
+                  <span className={`outputPanelBadge ${outputData.exitCode === 0 ? 'outputPanelBadgeSuccess' : 'outputPanelBadgeError'}`}>
+                    {outputData.exitCode === 0 ? '✓ Success' : `✗ Exit code: ${outputData.exitCode}`}
+                  </span>
+                )}
+                {outputData && (
+                  <span className="outputPanelTime">
+                    {(outputData.executionTime / 1000).toFixed(2)}s
+                  </span>
+                )}
+              </div>
+              <button className="outputPanelCloseBtn" onClick={() => setShowOutput(false)}>✕</button>
+            </div>
+            <div className="outputPanelContent" ref={outputRef}>
+              {isRunning && (
+                <div className="outputPanelLoading">
+                  <div className="outputPanelLoadingDots">
+                    <span></span><span></span><span></span>
+                  </div>
+                  <p>Executing code...</p>
+                </div>
+              )}
+              {outputData && (
+                <>
+                  {outputData.output && (
+                    <pre className="outputPanelStdout">{outputData.output}</pre>
+                  )}
+                  {outputData.error && (
+                    <pre className="outputPanelStderr">{outputData.error}</pre>
+                  )}
+                  {!outputData.output && !outputData.error && (
+                    <p className="outputPanelEmpty">Program finished with no output.</p>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       <Toaster />
     </div>
   )

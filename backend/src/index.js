@@ -4,12 +4,14 @@ import http from 'http';
 import path from 'path';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'url';
+import { executeCode, checkImages } from './executeCode.js';
 
 const app = express();
 const server = http.createServer(app);
 
 // Allow cross-origin requests from frontend
 app.use(cors());
+app.use(express.json({ limit: '1mb' }));
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,6 +33,45 @@ if (process.env.NODE_ENV === "production") {
 
 app.get('/', function (req, res) {
   res.send('Hello from the server!');
+});
+
+// Code execution endpoint
+app.post('/api/execute', async (req, res) => {
+  const { code, language } = req.body;
+
+  if (!code || !language) {
+    return res.status(400).json({
+      output: '',
+      error: 'Both "code" and "language" fields are required.',
+      exitCode: 1,
+      executionTime: 0,
+      timedOut: false,
+    });
+  }
+
+  try {
+    const result = await executeCode(code, language);
+    res.json(result);
+  } catch (err) {
+    console.error('Code execution error:', err);
+    res.status(500).json({
+      output: '',
+      error: `Server error: ${err.message}`,
+      exitCode: 1,
+      executionTime: 0,
+      timedOut: false,
+    });
+  }
+});
+
+// Check which Docker images are available
+app.get('/api/images', async (req, res) => {
+  try {
+    const images = await checkImages();
+    res.json(images);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 const socketID_to_Users_Map = {};
